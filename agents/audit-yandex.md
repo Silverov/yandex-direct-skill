@@ -7,84 +7,71 @@ collected API data and produce a structured audit report with scoring.
 
 ## Inputs
 
-You will receive a directory path containing JSON files from `scripts/yd-audit.sh`:
-- `campaigns.json` — all campaigns with settings
-- `adgroups.json` — all ad groups
-- `keywords.json` — all keywords with stats
-- `ads.json` — all ads with text and status
-- `sitelinks.json` — sitelink sets
-- `negative_sets.json` — negative keyword shared sets
+A directory produced by `scripts/yd-audit.sh`:
+- `summary.json` — counts, campaign and ad types, goals used in reports, collection errors
+- `campaigns.json` — campaigns; type-specific settings in `UnifiedCampaign` / `TextCampaign` /
+  `DynamicTextCampaign` / `SmartCampaign` (strategy, counters, priority goals, settings, tracking)
+- `adgroups.json` — ad groups with regions, negatives, `ServingStatus`
+- `keywords.json` — keywords and `---autotargeting` with `AutotargetingSettings`
+- `ads.json` — ads: `ResponsiveAd` (combinatorial), `TextAd`, `TextImageAd`, `ShoppingAd`, …
+- `sitelinks.json`, `adextensions.json` (callouts), `negative_sets.json`, `bidmodifiers.json`
+- `reports/campaign.tsv` (by `AdNetworkType`), `reports/criteria.tsv`, `reports/search_query.tsv`,
+  `reports/placement.tsv` — last 30 days
 
-Plus optional report TSVs from `scripts/yd-report.sh`:
-- Campaign performance report
-- Search query report
+All JSON files have the shape `{"result": {"<Key>": [...]}}`.
 
 ## Process
 
-### Step 1: Load References
+### Step 1: Load references
 ```
-Read references/yandex-audit.md    # 55 checks
-Read references/scoring-system.md  # Scoring algorithm
-Read references/benchmarks.md      # Russian market benchmarks
+Read references/yandex-audit.md       # 55 checks with data sources
+Read references/scoring-system.md     # scoring algorithm
+Read references/benchmarks.md         # how to compare metrics
+Read references/bidding-strategies.md # for YD49–YD51
 ```
 
-### Step 2: Run All 55 Checks (YD01-YD55)
+### Step 2: Check data quality first
+- `summary.json.errors` not empty → mark the affected checks N/A and say so in the report.
+- `summary.json.report_goals` empty → conversions in reports are summed over ALL goals.
+  Do not compute CPA-based checks (YD08, YD12, YD14, YD17) from them — mark N/A and ask for goal IDs.
+- With goals, conversion columns are named `Conversions_<goalId>_<model>`, `CostPerConversion_<goalId>_<model>`.
 
-For each check, determine: **PASS**, **WARNING**, **FAIL**, or **N/A**
+### Step 3: Run all 55 checks (YD01–YD55)
 
-Key analysis logic:
+For each check determine **PASS**, **WARNING**, **FAIL** or **N/A**, following the
+«Данные и критерий» column. Notes on the data:
 
-**Конверсии и Метрика (YD01-YD09):**
-- Check `CounterIds` in campaign settings (non-empty = PASS for YD01)
-- Goals require Metrika API or manual confirmation
+- Campaign settings live in the type-specific structure. `Settings` is a list of
+  `{Option, Value}`; `CounterIds`, `PriorityGoals`, `NegativeKeywordSharedSetIds` are `{Items: [...]}`.
+- Strategy: `BiddingStrategy.Search.BiddingStrategyType` and `BiddingStrategy.Network.BiddingStrategyType`;
+  parameters are in the nested object named after the strategy (`AverageCpa`, `PayForConversion`, `WbMaximumClicks`, …).
+  Money values in the API are in micro-units: divide by 1 000 000.
+- Combinatorial ads: `ResponsiveAd.Titles[]`, `Texts[]`, `AdImages.Items[]`, each element has its own `Status`.
+- Search vs networks inside one Unified campaign: use `reports/campaign.tsv` split by `AdNetworkType` (SEARCH / AD_NETWORK).
+- «вручную» checks: ask the user only if the answer changes the verdict; otherwise N/A.
 
-**Слив бюджета (YD10-YD18):**
-- Check `negative_sets.json` for shared sets (YD11)
-- Check keywords for duplicates across groups (YD18)
-- Identify zero-conversion keywords with high spend (YD17)
+### Step 4: Calculate score
 
-**Структура (YD19-YD26):**
-- Check campaign types — search and network should be separate (YD19)
-- Count keywords per group — flag if > 15 (YD22)
-- Check naming conventions (YD21)
-
-**Ключевые слова (YD27-YD34):**
-- Check for operator usage in keywords (YD27)
-- Flag broad match in non-auto-strategy campaigns (YD28)
-- Check for "мало показов" status (YD31)
-
-**Объявления (YD35-YD46):**
-- Check ad moderation status (YD35)
-- Count ads per group — need ≥ 2 (YD36)
-- Check for sitelink sets (YD39)
-- Check UTM in Href fields (YD43)
-
-**Настройки (YD47-YD55):**
-- Verify RegionIds in ad groups (YD47)
-- Check bidding strategy type (YD49)
-- Check DailyBudget sufficiency (YD50)
-
-### Step 3: Calculate Score
-
-Use the weighted scoring formula from `references/scoring-system.md`:
+Weighted formula from `references/scoring-system.md`:
 ```
 S_total = Σ(C_pass × W_sev × W_cat) / Σ(C_total × W_sev × W_cat) × 100
 ```
 
-### Step 4: Generate Report
+### Step 5: Generate report
 
 Output format:
 ```markdown
-# Аудит Яндекс Директ — [Account Name]
+# Аудит Яндекс Директа — [Account / Client-Login]
 
 **Дата:** YYYY-MM-DD
 **Оценка:** XX/100 (Грейд X)
+**Период статистики:** YYYY-MM-DD — YYYY-MM-DD, цели: [ids или «все цели — CPA не оценивался»]
 
 ## Сводка
-- Кампаний: N
-- Групп: N
-- Ключей: N
-- Объявлений: N
+- Кампаний: N (ЕПК: N, другие типы: …)
+- Групп: N (мало показов: N)
+- Фраз: N, автотаргетинг: N групп
+- Объявлений: N (комбинаторных: N, текстово-графических: N, отклонено: N)
 
 ## Результаты по категориям
 
@@ -107,9 +94,12 @@ Output format:
 
 ## Rules
 
-- Always use Russian for the report output
-- Compare metrics against benchmarks from `references/benchmarks.md`
-- Flag Quick Wins (Critical/High severity + < 15 min fix time)
-- Sort action plan by: Critical → High → Medium → Low
-- If data is insufficient for a check, mark as N/A (excluded from scoring)
-- Never recommend changes during active learning phase (first 7 days of auto-strategy)
+- Always write the report in Russian.
+- Compare metrics with the account's own medians first, market references second (`benchmarks.md`).
+- Quick Wins = Critical/High severity + < 15 min fix time.
+- Sort the action plan: Critical → High → Medium → Low.
+- Insufficient data → N/A (excluded from scoring), never a guess.
+- Do not recommend changing the strategy, its spend-limit type or payment model while it is learning
+  (first 2–3 weeks) — each such change restarts learning (see `bidding-strategies.md`).
+- This is a read-only analysis: never call write methods. Changes are made later only after
+  the user approves each one.
