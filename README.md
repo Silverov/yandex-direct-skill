@@ -111,6 +111,11 @@ Benchmarks vary by industry — see `references/benchmarks.md` for full data.
 
 ## 📝 Changelog
 
+### v2.0.1 — October 2026
+- Clear hint when the Direct API answers an empty HTTP 204 (API turned off on Yandex's side, e.g. the special mode after the October 2026 data-center incident) in `yd-api.sh` and `yd-report.sh`.
+- `yd-audit.sh` suggests `--include-archived` when every campaign is archived.
+- Mapping of the old strategy labels in the campaigns grid («Оптимизация кликов / конверсий») to API strategy types.
+
 ### v2.0 — October 2026
 - **Fixed:** `yd-api.sh` appended an extra `}` to every params argument (`${3:-{}}`), so no request with parameters could run.
 - **Fixed:** audit requests rejected by the API: `AdExtensionIds` in `TextAdFieldNames`, empty `SelectionCriteria` for sitelinks and negative keyword sets, more than 10 `CampaignIds` per request; no pagination.
@@ -210,6 +215,11 @@ git clone https://github.com/Silverov/yandex-direct-skill ~/.claude/skills/direc
 Скажите агенту: «Проведи аудит Яндекс Директа» — и наблюдайте.
 
 ## 📝 История изменений
+
+### v2.0.1 — октябрь 2026
+- Понятная подсказка, когда API Директа отвечает пустым HTTP 204 (API отключён на стороне Яндекса, например в спецрежиме после сбоя дата-центров в октябре 2026) — в `yd-api.sh` и `yd-report.sh`.
+- `yd-audit.sh` подсказывает `--include-archived`, если все кампании в архиве.
+- Соответствие старых подписей стратегий в таблице кампаний («Оптимизация кликов / конверсий») типам стратегий в API.
 
 ### v2.0 — октябрь 2026
 - **Исправлено:** `yd-api.sh` дописывал лишнюю `}` к любым параметрам (`${3:-{}}`) — ни один запрос с параметрами не выполнялся.

@@ -110,12 +110,20 @@ CAMPAIGN_PARAMS=$(jq -cn --argjson archived "$INCLUDE_ARCHIVED" '{
     SmartCampaignFieldNames: ["CounterId","Settings","BiddingStrategy","PriorityGoals","AttributionModel","TrackingParams"]
 }')
 if ! fetch_all campaigns Campaigns "$CAMPAIGN_PARAMS" "$OUTPUT_DIR/campaigns.json"; then
-    echo "ERROR: campaigns fetch failed — check token, Client-Login and API access" >&2
+    echo "ERROR: campaigns fetch failed — see the API error above" >&2
     exit 1
 fi
 CAMPAIGN_IDS=$(jq -c '[.result.Campaigns[].Id]' "$OUTPUT_DIR/campaigns.json")
 if [[ $(jq 'length' <<< "$CAMPAIGN_IDS") -eq 0 ]]; then
     echo "ERROR: no campaigns found" >&2
+    if [[ "$INCLUDE_ARCHIVED" == "0" ]]; then
+        ARCHIVED=$("$YD_API" campaigns get '{"SelectionCriteria":{"States":["ARCHIVED"]},"FieldNames":["Id"]}' 2> /dev/null \
+            | jq '.result.Campaigns | length' 2> /dev/null || echo 0)
+        if [[ "${ARCHIVED:-0}" -gt 0 ]]; then
+            echo "HINT: the account has ${ARCHIVED} archived campaign(s), which are skipped by default." >&2
+            echo "      Rerun with --include-archived to audit them." >&2
+        fi
+    fi
     exit 1
 fi
 echo "  campaigns: $(jq 'length' <<< "$CAMPAIGN_IDS") — $(jq -r '[.result.Campaigns[].Type] | group_by(.) | map("\(.[0])×\(length)") | join(", ")' "$OUTPUT_DIR/campaigns.json")"

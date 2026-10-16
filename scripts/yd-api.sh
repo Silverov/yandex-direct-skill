@@ -101,6 +101,11 @@ if ! jq -e . "$BODY_FILE" > /dev/null 2>&1; then
     echo "ERROR: HTTP ${HTTP_CODE:-?}, non-JSON response from ${SERVICE}.${METHOD}:" >&2
     head -c 2000 "$BODY_FILE" >&2
     echo >&2
+    if [[ "$HTTP_CODE" == "204" ]]; then
+        echo "HINT: an empty HTTP 204 to every request (even with a wrong token) means the Direct API is turned off" >&2
+        echo "      on Yandex's side — e.g. the special mode after the October 2026 data-center incident, when only the" >&2
+        echo "      web interface works. Not a token or IP problem: https://yandex.ru/support/direct/ru/special-mode" >&2
+    fi
     exit 1
 fi
 

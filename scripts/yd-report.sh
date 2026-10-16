@@ -220,6 +220,12 @@ while :; do
             echo "Report queued (HTTP $HTTP_CODE, reportsInQueue=$(header reportsInQueue)), retry in ${RETRY_IN}s..." >&2
             sleep "$RETRY_IN"; WAITED=$((WAITED + RETRY_IN))
             ;;
+        204)
+            echo "ERROR: empty HTTP 204 from Reports API — the Direct API is turned off on Yandex's side" >&2
+            echo "       (e.g. special mode after the October 2026 data-center incident). Not a token or IP problem:" >&2
+            echo "       https://yandex.ru/support/direct/ru/special-mode" >&2
+            exit 1
+            ;;
         5*|000)
             SERVER_ERRORS=$((SERVER_ERRORS + 1))
             if [[ $SERVER_ERRORS -ge 3 ]]; then

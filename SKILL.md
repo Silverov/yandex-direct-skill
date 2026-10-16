@@ -19,7 +19,7 @@ allowed-tools:
 # Yandex Direct — PPC Audit & Management (API v5 / v501)
 
 **Authors:** Nick Serebrov & Kobe 🐍
-**Version:** 2.0 — актуально на октябрь 2026
+**Version:** 2.0.1 — актуально на октябрь 2026
 
 Full-cycle Yandex Direct management: account audits, campaign CRUD, keyword
 management, reporting, optimization, and budget analysis.
@@ -73,6 +73,16 @@ API limits that break naive requests:
 - Reports: `Goals` ≤ 10; `AttributionModels` only `AUTO`, `LSCCD`, `FCCD`, `LC`; ≤ 5 offline reports in queue.
 - `keywords.get`: `Productivity` is always `null`; `AutotargetingCategories` is deprecated — use
   `AutotargetingSettings` (`AutotargetingSettingsCategoriesFieldNames`, `AutotargetingSettingsBrandOptionsFieldNames`).
+
+Troubleshooting:
+- Empty HTTP 204 to every request, even with a wrong token → the Direct API is turned off on Yandex's side
+  (e.g. the special mode after the October 2026 data-center incident: only the web interface and the mobile app
+  work, see https://yandex.ru/support/direct/ru/special-mode). Not a token, IP or script problem — wait, and
+  meanwhile use the web interface for read-only checks.
+- `yd-audit.sh` says «no campaigns found» → all campaigns may be archived; rerun with `--include-archived`
+  (the script prints the archived count when it can).
+- The campaigns grid labels strategies «Оптимизация кликов» / «Оптимизация конверсий»; the API type is in
+  `BiddingStrategyType` (see `references/bidding-strategies.md`).
 
 ## Safety rule for changes
 
