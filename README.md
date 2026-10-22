@@ -111,6 +111,12 @@ Benchmarks vary by industry — see `references/benchmarks.md` for full data.
 
 ## 📝 Changelog
 
+### v2.0.2 — October 2026
+- **Fixed:** `yd-audit.sh` read campaigns and ad groups from v5, where a Unified campaign looks like `TEXT_CAMPAIGN` without its settings — now v501 (`yd-api.sh` also routes such `get` requests there).
+- **Fixed:** Reports API error 56 (one request per 10 s): pause between audit reports, offline reports polled every ≥ 10 s, error 56 retried.
+- **Fixed:** `sitelinks.get` in the audit was rejected (error 4004: `Sitelinks` in `FieldNames` together with `SitelinkFieldNames`).
+- **Docs:** the auto-generated ERIR ad description of combinatorial ads is not available in the API — check it in the web interface.
+
 ### v2.0.1 — October 2026
 - Clear hint when the Direct API answers an empty HTTP 204 (API turned off on Yandex's side, e.g. the special mode after the October 2026 data-center incident) in `yd-api.sh` and `yd-report.sh`.
 - `yd-audit.sh` suggests `--include-archived` when every campaign is archived.
@@ -215,6 +221,12 @@ git clone https://github.com/Silverov/yandex-direct-skill ~/.claude/skills/direc
 Скажите агенту: «Проведи аудит Яндекс Директа» — и наблюдайте.
 
 ## 📝 История изменений
+
+### v2.0.2 — октябрь 2026
+- **Исправлено:** `yd-audit.sh` читал кампании и группы через v5, где ЕПК выглядит как `TEXT_CAMPAIGN` без своих настроек, — теперь через v501 (`yd-api.sh` тоже отправляет такие `get`-запросы на v501).
+- **Исправлено:** ошибка 56 Reports API (не чаще 1 запроса в 10 с): пауза между отчётами аудита, офлайн-отчёты опрашиваются не чаще раза в 10 с, при ошибке 56 запрос повторяется.
+- **Исправлено:** `sitelinks.get` в аудите отклонялся (ошибка 4004: `Sitelinks` в `FieldNames` вместе с `SitelinkFieldNames`).
+- **Документация:** автоописание для ЕРИР у комбинаторных объявлений через API не читается — проверять в интерфейсе.
 
 ### v2.0.1 — октябрь 2026
 - Понятная подсказка, когда API Директа отвечает пустым HTTP 204 (API отключён на стороне Яндекса, например в спецрежиме после сбоя дата-центров в октябре 2026) — в `yd-api.sh` и `yd-report.sh`.

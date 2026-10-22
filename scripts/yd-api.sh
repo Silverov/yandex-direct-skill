@@ -10,7 +10,10 @@
 #   YD_CLIENT_LOGIN  client login for agency/representative access (overrides client_login from the file)
 #   YD_API_VERSION   v5 | v501. Default: v5, but requests that carry UnifiedCampaign,
 #                    UnifiedAdGroup, ShoppingAd or ListingAd structures go to v501 automatically
-#                    (Yandex documents creation of Unified Performance Campaign objects on v501).
+#                    (Yandex documents creation of Unified Performance Campaign objects on v501),
+#                    and so do get requests with UnifiedCampaign*/UnifiedAdGroup* field names:
+#                    v5 reports a Unified campaign as TEXT_CAMPAIGN (groups as TEXT_AD_GROUP)
+#                    and drops its UnifiedCampaign settings, e.g. search PlacementTypes.
 #   YD_SANDBOX=1     use https://api-sandbox.direct.yandex.com
 #   YD_API_HOST      override API host, e.g. for a local mock (default: https://api.direct.yandex.com)
 #   YD_VERBOSE=1     print RequestId and Units (spent/rest/limit) to stderr
@@ -64,6 +67,9 @@ if [[ -z "$API_VERSION" ]]; then
     API_VERSION="v5"
     if [[ "$METHOD" == "add" || "$METHOD" == "update" ]] \
         && echo "$PARAMS" | jq -e '[.. | objects | keys[]] | any(. == "UnifiedCampaign" or . == "UnifiedAdGroup" or . == "ShoppingAd" or . == "ListingAd")' > /dev/null; then
+        API_VERSION="v501"
+    elif [[ "$METHOD" == "get" ]] \
+        && echo "$PARAMS" | jq -e 'keys | any(startswith("UnifiedCampaign") or startswith("UnifiedAdGroup"))' > /dev/null; then
         API_VERSION="v501"
     fi
 fi

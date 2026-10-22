@@ -27,8 +27,11 @@
 #   --daily                 add Date
 #   --vat yes|no            include VAT in money fields (default: yes)
 #   --mode auto|online|offline   processingMode header (default: auto)
-#   --max-wait SECONDS      how long to poll an offline report (default: 600)
+#   --max-wait SECONDS      how long to poll an offline report or wait out rate limits (default: 600)
 #   --out FILE              write TSV to FILE instead of stdout
+#
+# Reports API accepts one request per 10 s (error 56 otherwise): offline reports are polled
+# no more often than every 10 s, and error 56 is retried after 11 s instead of failing.
 #
 # Environment: YD_SECRETS, YD_TOKEN, YD_CLIENT_LOGIN, YD_SANDBOX, YD_API_HOST — same as yd-api.sh
 #
@@ -213,6 +216,8 @@ while :; do
             ;;
         201|202)
             RETRY_IN=$(header retryIn); [[ "$RETRY_IN" =~ ^[0-9]+$ ]] || RETRY_IN=10
+            # retryIn can be 1 s, but a poll sooner than 10 s after the last request gets error 56
+            [[ "$RETRY_IN" -lt 10 ]] && RETRY_IN=10
             if [[ $((WAITED + RETRY_IN)) -gt "$MAX_WAIT" ]]; then
                 echo "ERROR: report '$REPORT_NAME' is not ready after ${WAITED}s (HTTP $HTTP_CODE). Increase --max-wait." >&2
                 exit 2
@@ -234,6 +239,16 @@ while :; do
             sleep $((SERVER_ERRORS * 5)); WAITED=$((WAITED + SERVER_ERRORS * 5))
             ;;
         *)
+            # error 56 (HTTP 400): "не чаще чем 1 раз в 10 секунд" — wait and repeat the same request
+            if [[ "$(jq -r '.error.error_code // empty' "$BODY_FILE" 2> /dev/null || true)" == "56" ]]; then
+                if [[ $((WAITED + 11)) -gt "$MAX_WAIT" ]]; then
+                    echo "ERROR: Reports API rate limit (error 56) for ${WAITED}s. Increase --max-wait." >&2
+                    exit 2
+                fi
+                echo "Reports API rate limit (error 56: one request per 10 s), retry in 11s..." >&2
+                sleep 11; WAITED=$((WAITED + 11))
+                continue
+            fi
             echo "ERROR: HTTP $HTTP_CODE from Reports API (RequestId=$(header RequestId))" >&2
             if jq -e '.error' "$BODY_FILE" > /dev/null 2>&1; then jq '.error' "$BODY_FILE" >&2; else cat "$BODY_FILE" >&2; fi
             exit 1
