@@ -14,7 +14,10 @@
 # campaign (by network), criteria, search queries, YAN placements.
 #
 # Output: <dir>/<object>.json as {"result": {"<Key>": [...]}}, <dir>/reports/*.tsv, <dir>/summary.json
-# API limits handled here: CampaignIds <= 10 per get request, pagination by 10 000 objects.
+# API limits handled here: CampaignIds <= 10 per get request, pagination by 10 000 objects,
+# Reports API one request per 10 s (pause between reports; yd-report.sh retries error 56).
+# Campaigns and ad groups are read from v501: v5 shows a Unified campaign as TEXT_CAMPAIGN
+# (groups as TEXT_AD_GROUP) without its UnifiedCampaign settings.
 
 set -euo pipefail
 
@@ -109,7 +112,7 @@ CAMPAIGN_PARAMS=$(jq -cn --argjson archived "$INCLUDE_ARCHIVED" '{
                                     "TrackingParams","NegativeKeywordSharedSetIds","PlacementTypes"],
     SmartCampaignFieldNames: ["CounterId","Settings","BiddingStrategy","PriorityGoals","AttributionModel","TrackingParams"]
 }')
-if ! fetch_all campaigns Campaigns "$CAMPAIGN_PARAMS" "$OUTPUT_DIR/campaigns.json"; then
+if ! YD_API_VERSION=v501 fetch_all campaigns Campaigns "$CAMPAIGN_PARAMS" "$OUTPUT_DIR/campaigns.json"; then
     echo "ERROR: campaigns fetch failed — see the API error above" >&2
     exit 1
 fi
@@ -130,13 +133,13 @@ echo "  campaigns: $(jq 'length' <<< "$CAMPAIGN_IDS") — $(jq -r '[.result.Camp
 
 # 2. Ad groups
 echo "[2/8] Ad groups..."
-fetch_by_ids adgroups AdGroups "$CAMPAIGN_IDS" 10 '{
+YD_API_VERSION=v501 fetch_by_ids adgroups AdGroups "$CAMPAIGN_IDS" 10 '{
     SelectionCriteria: {CampaignIds: $ids},
     FieldNames: ["Id","Name","CampaignId","Status","ServingStatus","Type","Subtype","RegionIds","RestrictedRegionIds",
                  "NegativeKeywords","NegativeKeywordSharedSetIds","TrackingParams"],
     UnifiedAdGroupFieldNames: ["OfferRetargeting"]
 }' "$OUTPUT_DIR/adgroups.json" || echo "  WARN: ad groups partially failed"
-echo "  ad groups: $(count adgroups.json AdGroups)"
+echo "  ad groups: $(count adgroups.json AdGroups) — $(jq -r '[.result.AdGroups[].Type] | group_by(.) | map("\(.[0])×\(length)") | join(", ")' "$OUTPUT_DIR/adgroups.json")"
 
 # 3. Keywords and autotargeting
 echo "[3/8] Keywords and autotargeting..."
@@ -170,9 +173,10 @@ fetch_by_ids ads Ads "$CAMPAIGN_IDS" 10 '{
 }' "$OUTPUT_DIR/ads.json" || echo "  WARN: ads partially failed"
 echo "  ads: $(count ads.json Ads) — $(jq -r '[.result.Ads[].Type] | group_by(.) | map("\(.[0])×\(length)") | join(", ")' "$OUTPUT_DIR/ads.json")"
 
-# 5. Sitelink sets (all sets of the client; SelectionCriteria omitted on purpose)
+# 5. Sitelink sets (all sets of the client; SelectionCriteria omitted on purpose).
+#    "Sitelinks" in FieldNames and SitelinkFieldNames together are rejected (error 4004)
 echo "[5/8] Sitelink sets..."
-fetch_all sitelinks SitelinksSets '{"FieldNames":["Id","Sitelinks"],"SitelinkFieldNames":["Title","Href","Description"]}' \
+fetch_all sitelinks SitelinksSets '{"FieldNames":["Id"],"SitelinkFieldNames":["Title","Href","Description"]}' \
     "$OUTPUT_DIR/sitelinks.json" || echo "  WARN: sitelinks fetch failed"
 echo "  sitelink sets: $(count sitelinks.json SitelinksSets)"
 
@@ -231,8 +235,12 @@ if [[ "$WITH_REPORTS" == "1" ]]; then
     [[ -n "$REPORT_GOALS" ]] && REPORT_ARGS+=(--goals "$REPORT_GOALS")
     [[ -n "$DATE_FROM" ]] && REPORT_ARGS+=(--from "$DATE_FROM")
     [[ -n "$DATE_TO" ]] && REPORT_ARGS+=(--to "$DATE_TO")
+    first=1
     for spec in "campaign --by-network" "criteria" "search_query" "placement"; do
         name="${spec%% *}"
+        # Reports API: one request per 10 s, otherwise error 56
+        [[ $first == 1 ]] || sleep 11
+        first=0
         # shellcheck disable=SC2086
         if "$YD_REPORT" $spec ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"} --out "$OUTPUT_DIR/reports/${name}.tsv" 2> "$WORK/stderr.txt"; then
             REPORTS_DONE=$(jq -c --arg n "$name" '. + [$n]' <<< "$REPORTS_DONE")
@@ -267,6 +275,7 @@ jq -n \
         bid_modifiers: ($b[0].result.BidModifiers | length)
       },
       campaign_types: by_type($c[0].result.Campaigns),
+      adgroup_types: by_type($g[0].result.AdGroups),
       ad_types: by_type($a[0].result.Ads),
       report_goals: ($goals | split(",") | map(select(length > 0))),
       reports: $reports,
